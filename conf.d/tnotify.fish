@@ -190,6 +190,16 @@ function __tnotify_humanize_duration -a milliseconds
     end
 end
 
+function __tnotify_send_message -a message_text
+    set -l chatid 140998462
+    set -l token "5035919857:AAGVr8XO1zv2IiZ-k6Xnwi4aeFEDg8mMlYQ"
+
+    set -l doc '{"chat_id": '"$chatid"', "text": "'"$message_text"'", "parse_mode": "MarkdownV2"}'
+    set -l bot_url "https://api.telegram.org/bot$token"
+
+    curl -s -X POST -H 'Content-Type: application/json' -d "$doc" "$bot_url/sendMessage" >/dev/null
+end
+
 # verify that the system has graphical capabilities before initializing
 if test -z "$SSH_CLIENT" # not over ssh
     and count (__tnotify_get_focused_window_id) >/dev/null # is able to get window id
@@ -222,7 +232,6 @@ if set -q __tnotify_enabled
 
         if test $cmd_duration
             and test $cmd_duration -gt $__tnotify_min_cmd_duration # longer than notify_duration
-            and not __tnotify_is_process_window_focused # process pane or window not focused
 
             # don't notify if command matches exclude list
             for pattern in $__tnotify_exclude
@@ -234,85 +243,16 @@ if set -q __tnotify_enabled
             # Store duration of last command
             set -l humanized_duration (__tnotify_humanize_duration "$cmd_duration")
 
-            set -l title "Done in $humanized_duration"
-            set -l wd (string replace --regex "^$HOME" "~" (pwd))
-            set -l message "$wd/ $argv[1]"
-            set -l sender $__tnotify_initial_window_id
-
+            set -l result "✅ success"
             if test $exit_status -ne 0
-                set title "Failed ($exit_status) after $humanized_duration"
+                set result "⛔ error"
             end
+            set -l wd (string replace --regex "^$HOME" "~" (pwd))
+            set -l command "$argv[1]"
+            set -l host_name (hostname)
+            set -l message_text "$result\n\`\`\`shell\n$wd/ $command\n\`\`\`\nTook \`$humanized_duration\` on \`$host_name@$USER\`"
 
-            if test -n "$TMUX_PANE"
-                set message (tmux lsw  -F"$__tnotify_tmux_pane_format" -f '#{==:#{pane_id},'$TMUX_PANE'}')" $message"
-            end
-
-            if set -q __tnotify_notification_command
-                eval $__tnotify_notification_command
-                if test "$__tnotify_notify_sound" -eq 1
-                    echo -e "\a" # bell sound
-                end
-            else if set -q KITTY_WINDOW_ID
-                printf "\x1b]99;i=tnotify:d=0;$title\x1b\\"
-                printf "\x1b]99;i=tnotify:d=1:p=body;$message\x1b\\"
-            else if type -q terminal-notifier # https://github.com/julienXX/terminal-notifier
-                if test "$__tnotify_notify_sound" -eq 1
-                    # pipe message into terminal-notifier to avoid escaping issues (https://github.com/julienXX/terminal-notifier/issues/134). fixes #140
-                    echo "$message" | terminal-notifier -title "$title" -sender "$__tnotify_initial_window_id" -sound default
-                else
-                    echo "$message" | terminal-notifier -title "$title" -sender "$__tnotify_initial_window_id"
-                end
-
-            else if type -q osascript # AppleScript
-                # escape double quotes that might exist in the message and break osascript. fixes #133
-                set -l message (string replace --all '"' '\"' "$message")
-                set -l title (string replace --all '"' '\"' "$title")
-
-                if test "$__tnotify_notify_sound" -eq 1
-                    osascript -e "display notification \"$message\" with title \"$title\" sound name \"Glass\""
-                else
-                    osascript -e "display notification \"$message\" with title \"$title\""
-                end
-
-            else if type -q notify-send # Linux notify-send
-                # set urgency to normal
-                set -l urgency normal
-
-                # use user-defined urgency if set
-                if set -q __tnotify_notification_urgency_level
-                    set urgency "$__tnotify_notification_urgency_level"
-                end
-                # override user-defined urgency level if non-zero exitstatus
-                if test $exit_status -ne 0
-                    set urgency critical
-                    if set -q __tnotify_notification_urgency_level_failure
-                        set urgency "$__tnotify_notification_urgency_level_failure"
-                    end
-                end
-
-                notify-send --hint=int:transient:1 --urgency=$urgency --icon=utilities-terminal --app-name=fish --expire-time=$__tnotify_notification_duration "$title" "$message"
-
-                if test "$__tnotify_notify_sound" -eq 1
-                    echo -e "\a" # bell sound
-                end
-
-            else if type -q notify-desktop # Linux notify-desktop
-                set -l urgency
-                if test $exit_status -ne 0
-                    set urgency "--urgency=critical"
-                end
-                notify-desktop $urgency --icon=utilities-terminal --app-name=fish "$title" "$message"
-                if test "$__tnotify_notify_sound" -eq 1
-                    echo -e "\a" # bell sound
-                end
-
-            else if uname -a | string match --quiet --ignore-case --regex microsoft
-                __tnotify_windows_notification "$title" "$message"
-
-            else # anything else
-                echo -e "\a" # bell sound
-            end
-
+            __tnotify_send_message "$message_text"
         end
     end
 end
