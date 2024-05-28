@@ -1,8 +1,8 @@
 # run this file with jorgebucaran/fishtape
-# i.e. fishtape test/done.fish
+# i.e. fishtape test/tnotify.fish
 
 function setup
-  source conf.d/done.fish
+    source conf.d/tnotify.fish
 end
 
 @test "commands are executed without errors" (

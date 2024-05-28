@@ -24,9 +24,9 @@ if not status is-interactive
     exit
 end
 
-set -g __done_version 1.19.3
+set -g __tnotify_version 1.19.3
 
-function __done_run_powershell_script
+function __tnotify_run_powershell_script
     set -l powershell_exe (command --search "powershell.exe")
 
     if test $status -ne 0
@@ -44,14 +44,14 @@ function __done_run_powershell_script
     end
 end
 
-function __done_windows_notification -a title -a message
-    if test "$__done_notify_sound" -eq 1
+function __tnotify_windows_notification -a title -a message
+    if test "$__tnotify_notify_sound" -eq 1
         set soundopt "<audio silent=\"false\" src=\"ms-winsoundevent:Notification.Default\" />"
     else
         set soundopt "<audio silent=\"true\" />"
     end
 
-    __done_run_powershell_script "
+    __tnotify_run_powershell_script "
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 
@@ -76,7 +76,7 @@ function __done_windows_notification -a title -a message
 "
 end
 
-function __done_get_focused_window_id
+function __tnotify_get_focused_window_id
     if type -q lsappinfo
         lsappinfo info -only bundleID (lsappinfo front | string replace 'ASN:0x0-' '0x') | cut -d '"' -f4
     else if test -n "$SWAYSOCK"
@@ -94,7 +94,7 @@ function __done_get_focused_window_id
         and xprop -grammar >/dev/null 2>&1
         xprop -root 32x '\t$0' _NET_ACTIVE_WINDOW | cut -f 2
     else if uname -a | string match --quiet --ignore-case --regex microsoft
-        __done_run_powershell_script '
+        __tnotify_run_powershell_script '
 Add-Type @"
     using System;
     using System.Runtime.InteropServices;
@@ -105,12 +105,12 @@ Add-Type @"
 "@
 [WindowsCompat]::GetForegroundWindow()
 '
-    else if set -q __done_allow_nongraphical
+    else if set -q __tnotify_allow_nongraphical
         echo 12345 # dummy value
     end
 end
 
-function __done_is_tmux_window_active
+function __tnotify_is_tmux_window_active
     set -q fish_pid; or set -l fish_pid %self
 
     # find the outermost process within tmux
@@ -130,51 +130,51 @@ function __done_is_tmux_window_active
     tmux list-panes -a -F "#{session_attached} #{window_active} #{pane_pid}" | string match -q "1 1 $tmux_fish_pid"
 end
 
-function __done_is_screen_window_active
+function __tnotify_is_screen_window_active
     string match --quiet --regex "$STY\s+\(Attached" (screen -ls)
 end
 
-function __done_is_process_window_focused
+function __tnotify_is_process_window_focused
     # Return false if the window is not focused
 
-    if set -q __done_allow_nongraphical
+    if set -q __tnotify_allow_nongraphical
         return 1
     end
 
-    if set -q __done_kitty_remote_control
-        kitty @ --password="$__done_kitty_remote_control_password" ls | jq -e ".[].tabs[] | select(any(.windows[]; .is_self)) | .is_focused" >/dev/null
+    if set -q __tnotify_kitty_remote_control
+        kitty @ --password="$__tnotify_kitty_remote_control_password" ls | jq -e ".[].tabs[] | select(any(.windows[]; .is_self)) | .is_focused" >/dev/null
         return $status
     end
 
-    set __done_focused_window_id (__done_get_focused_window_id)
-    if test "$__done_sway_ignore_visible" -eq 1
+    set __tnotify_focused_window_id (__tnotify_get_focused_window_id)
+    if test "$__tnotify_sway_ignore_visible" -eq 1
         and test -n "$SWAYSOCK"
-        string match --quiet --regex "^true" (swaymsg -t get_tree | jq ".. | objects | select(.id == "$__done_initial_window_id") | .visible")
+        string match --quiet --regex "^true" (swaymsg -t get_tree | jq ".. | objects | select(.id == "$__tnotify_initial_window_id") | .visible")
         return $status
     else if test -n "$HYPRLAND_INSTANCE_SIGNATURE"
-        and test $__done_initial_window_id = (hyprctl activewindow | awk 'NR==1 {print $2}')
+        and test $__tnotify_initial_window_id = (hyprctl activewindow | awk 'NR==1 {print $2}')
         return $status
-    else if test "$__done_initial_window_id" != "$__done_focused_window_id"
+    else if test "$__tnotify_initial_window_id" != "$__tnotify_focused_window_id"
         return 1
     end
     # If inside a tmux session, check if the tmux window is focused
     if type -q tmux
         and test -n "$TMUX"
-        __done_is_tmux_window_active
+        __tnotify_is_tmux_window_active
         return $status
     end
 
     # If inside a screen session, check if the screen window is focused
     if type -q screen
         and test -n "$STY"
-        __done_is_screen_window_active
+        __tnotify_is_screen_window_active
         return $status
     end
 
     return 0
 end
 
-function __done_humanize_duration -a milliseconds
+function __tnotify_humanize_duration -a milliseconds
     set -l seconds (math --scale=0 "$milliseconds/1000" % 60)
     set -l minutes (math --scale=0 "$milliseconds/60000" % 60)
     set -l hours (math --scale=0 "$milliseconds/3600000")
@@ -192,75 +192,75 @@ end
 
 # verify that the system has graphical capabilities before initializing
 if test -z "$SSH_CLIENT" # not over ssh
-    and count (__done_get_focused_window_id) >/dev/null # is able to get window id
-    set __done_enabled
+    and count (__tnotify_get_focused_window_id) >/dev/null # is able to get window id
+    set __tnotify_enabled
 end
 
-if set -q __done_allow_nongraphical
-    and set -q __done_notification_command
-    set __done_enabled
+if set -q __tnotify_allow_nongraphical
+    and set -q __tnotify_notification_command
+    set __tnotify_enabled
 end
 
-if set -q __done_enabled
-    set -g __done_initial_window_id ''
-    set -q __done_min_cmd_duration; or set -g __done_min_cmd_duration 5000
-    set -q __done_exclude; or set -g __done_exclude '^git (?!push|pull|fetch)'
-    set -q __done_notify_sound; or set -g __done_notify_sound 0
-    set -q __done_sway_ignore_visible; or set -g __done_sway_ignore_visible 0
-    set -q __done_tmux_pane_format; or set -g __done_tmux_pane_format '[#{window_index}]'
-    set -q __done_notification_duration; or set -g __done_notification_duration 3000
+if set -q __tnotify_enabled
+    set -g __tnotify_initial_window_id ''
+    set -q __tnotify_min_cmd_duration; or set -g __tnotify_min_cmd_duration 5000
+    set -q __tnotify_exclude; or set -g __tnotify_exclude '^git (?!push|pull|fetch)'
+    set -q __tnotify_notify_sound; or set -g __tnotify_notify_sound 0
+    set -q __tnotify_sway_ignore_visible; or set -g __tnotify_sway_ignore_visible 0
+    set -q __tnotify_tmux_pane_format; or set -g __tnotify_tmux_pane_format '[#{window_index}]'
+    set -q __tnotify_notification_duration; or set -g __tnotify_notification_duration 3000
 
-    function __done_started --on-event fish_preexec
-        set __done_initial_window_id (__done_get_focused_window_id)
+    function __tnotify_started --on-event fish_preexec
+        set __tnotify_initial_window_id (__tnotify_get_focused_window_id)
     end
 
-    function __done_ended --on-event fish_postexec
+    function __tnotify_ended --on-event fish_postexec
         set -l exit_status $status
 
         # backwards compatibility for fish < v3.0
         set -q cmd_duration; or set -l cmd_duration $CMD_DURATION
 
         if test $cmd_duration
-            and test $cmd_duration -gt $__done_min_cmd_duration # longer than notify_duration
-            and not __done_is_process_window_focused # process pane or window not focused
+            and test $cmd_duration -gt $__tnotify_min_cmd_duration # longer than notify_duration
+            and not __tnotify_is_process_window_focused # process pane or window not focused
 
             # don't notify if command matches exclude list
-            for pattern in $__done_exclude
+            for pattern in $__tnotify_exclude
                 if string match -qr $pattern $argv[1]
                     return
                 end
             end
 
             # Store duration of last command
-            set -l humanized_duration (__done_humanize_duration "$cmd_duration")
+            set -l humanized_duration (__tnotify_humanize_duration "$cmd_duration")
 
             set -l title "Done in $humanized_duration"
             set -l wd (string replace --regex "^$HOME" "~" (pwd))
             set -l message "$wd/ $argv[1]"
-            set -l sender $__done_initial_window_id
+            set -l sender $__tnotify_initial_window_id
 
             if test $exit_status -ne 0
                 set title "Failed ($exit_status) after $humanized_duration"
             end
 
             if test -n "$TMUX_PANE"
-                set message (tmux lsw  -F"$__done_tmux_pane_format" -f '#{==:#{pane_id},'$TMUX_PANE'}')" $message"
+                set message (tmux lsw  -F"$__tnotify_tmux_pane_format" -f '#{==:#{pane_id},'$TMUX_PANE'}')" $message"
             end
 
-            if set -q __done_notification_command
-                eval $__done_notification_command
-                if test "$__done_notify_sound" -eq 1
+            if set -q __tnotify_notification_command
+                eval $__tnotify_notification_command
+                if test "$__tnotify_notify_sound" -eq 1
                     echo -e "\a" # bell sound
                 end
             else if set -q KITTY_WINDOW_ID
-                printf "\x1b]99;i=done:d=0;$title\x1b\\"
-                printf "\x1b]99;i=done:d=1:p=body;$message\x1b\\"
+                printf "\x1b]99;i=tnotify:d=0;$title\x1b\\"
+                printf "\x1b]99;i=tnotify:d=1:p=body;$message\x1b\\"
             else if type -q terminal-notifier # https://github.com/julienXX/terminal-notifier
-                if test "$__done_notify_sound" -eq 1
+                if test "$__tnotify_notify_sound" -eq 1
                     # pipe message into terminal-notifier to avoid escaping issues (https://github.com/julienXX/terminal-notifier/issues/134). fixes #140
-                    echo "$message" | terminal-notifier -title "$title" -sender "$__done_initial_window_id" -sound default
+                    echo "$message" | terminal-notifier -title "$title" -sender "$__tnotify_initial_window_id" -sound default
                 else
-                    echo "$message" | terminal-notifier -title "$title" -sender "$__done_initial_window_id"
+                    echo "$message" | terminal-notifier -title "$title" -sender "$__tnotify_initial_window_id"
                 end
 
             else if type -q osascript # AppleScript
@@ -268,7 +268,7 @@ if set -q __done_enabled
                 set -l message (string replace --all '"' '\"' "$message")
                 set -l title (string replace --all '"' '\"' "$title")
 
-                if test "$__done_notify_sound" -eq 1
+                if test "$__tnotify_notify_sound" -eq 1
                     osascript -e "display notification \"$message\" with title \"$title\" sound name \"Glass\""
                 else
                     osascript -e "display notification \"$message\" with title \"$title\""
@@ -279,20 +279,20 @@ if set -q __done_enabled
                 set -l urgency normal
 
                 # use user-defined urgency if set
-                if set -q __done_notification_urgency_level
-                    set urgency "$__done_notification_urgency_level"
+                if set -q __tnotify_notification_urgency_level
+                    set urgency "$__tnotify_notification_urgency_level"
                 end
                 # override user-defined urgency level if non-zero exitstatus
                 if test $exit_status -ne 0
                     set urgency critical
-                    if set -q __done_notification_urgency_level_failure
-                        set urgency "$__done_notification_urgency_level_failure"
+                    if set -q __tnotify_notification_urgency_level_failure
+                        set urgency "$__tnotify_notification_urgency_level_failure"
                     end
                 end
 
-                notify-send --hint=int:transient:1 --urgency=$urgency --icon=utilities-terminal --app-name=fish --expire-time=$__done_notification_duration "$title" "$message"
+                notify-send --hint=int:transient:1 --urgency=$urgency --icon=utilities-terminal --app-name=fish --expire-time=$__tnotify_notification_duration "$title" "$message"
 
-                if test "$__done_notify_sound" -eq 1
+                if test "$__tnotify_notify_sound" -eq 1
                     echo -e "\a" # bell sound
                 end
 
@@ -302,12 +302,12 @@ if set -q __done_enabled
                     set urgency "--urgency=critical"
                 end
                 notify-desktop $urgency --icon=utilities-terminal --app-name=fish "$title" "$message"
-                if test "$__done_notify_sound" -eq 1
+                if test "$__tnotify_notify_sound" -eq 1
                     echo -e "\a" # bell sound
                 end
 
             else if uname -a | string match --quiet --ignore-case --regex microsoft
-                __done_windows_notification "$title" "$message"
+                __tnotify_windows_notification "$title" "$message"
 
             else # anything else
                 echo -e "\a" # bell sound
@@ -317,18 +317,18 @@ if set -q __done_enabled
     end
 end
 
-function __done_uninstall -e done_uninstall
-    # Erase all __done_* functions
-    functions -e __done_ended
-    functions -e __done_started
-    functions -e __done_get_focused_window_id
-    functions -e __done_is_tmux_window_active
-    functions -e __done_is_screen_window_active
-    functions -e __done_is_process_window_focused
-    functions -e __done_windows_notification
-    functions -e __done_run_powershell_script
-    functions -e __done_humanize_duration
+function __tnotify_uninstall -e done_uninstall
+    # Erase all __tnotify_* functions
+    functions -e __tnotify_ended
+    functions -e __tnotify_started
+    functions -e __tnotify_get_focused_window_id
+    functions -e __tnotify_is_tmux_window_active
+    functions -e __tnotify_is_screen_window_active
+    functions -e __tnotify_is_process_window_focused
+    functions -e __tnotify_windows_notification
+    functions -e __tnotify_run_powershell_script
+    functions -e __tnotify_humanize_duration
 
     # Erase __done variables
-    set -e __done_version
+    set -e __tnotify_version
 end
