@@ -232,6 +232,7 @@ if set -q __tnotify_enabled
 
         if test $cmd_duration
             and test $cmd_duration -gt $__tnotify_min_cmd_duration # longer than notify_duration
+            and not __tnotify_is_process_window_focused # process pane or window not focused
 
             # don't notify if command matches exclude list
             for pattern in $__tnotify_exclude
